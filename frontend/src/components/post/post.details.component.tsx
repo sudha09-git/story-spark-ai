@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   useDeletePostMutation,
@@ -16,9 +16,12 @@ import { ComparisonMode } from "../story-comparison";
 
 import LoadingAnimation from "../loading/loading.component";
 import SSProfile from "../ui-component/ss-profile/ss-profile";
+import ImageFallback from "../ImageFallback";
 import BookmarkButton from "../BookmarkButton";
+import AudioPlayer from "../AudioPlayer";
 
 import { formatDateShort } from "../../utils/time-formate";
+import { formatReadingStats } from "../../utils/story-utils";
 import { getUserInfo } from "../../services/auth.service";
 
 import { useToggleReactionMutation } from "../../redux/apis/reaction.api";
@@ -31,6 +34,7 @@ import {
 import { toast } from "react-hot-toast";
 
 import { FaXTwitter } from "react-icons/fa6";
+
 
 interface IStoryVersion {
   _id: string;
@@ -52,18 +56,32 @@ const PostDetailsComponent = () => {
   const { data: post, isLoading } = useGetPostByIdQuery(id || "");
 
   const tag = post?.tag;
-  const { data: relatedPost } = useGetPostByTagQuery({
-    tag: tag || "",
-    excludeId: post?._id || "",
-  });
 
+  const { data: relatedPost } = useGetPostByTagQuery(
+    {
+      tag: tag || "",
+      excludeId: post?._id || "",
+    },
+    {
+      skip: !tag,
+    }
+  );
+  
+
+  console.log("Current Post:", post);
+  console.log("Tag:", tag);
+  console.log(
+  "Related Posts Full Data:",
+  JSON.stringify(relatedPost, null, 2)
+);
+  
   const [toggleReaction] = useToggleReactionMutation();
   const [deletePost, { isLoading: isDeleting }] = useDeletePostMutation();
   const currentUser = getUserInfo();
 
   const authorId = post?.author?._id;
   const isOwner = Boolean(
-    currentUser?.email && post?.author?.email === currentUser.email
+    currentUser?.userId && authorId === currentUser.userId
   );
 
   const { data: followData } = useGetFollowStatusQuery(authorId || "", {
@@ -157,14 +175,12 @@ const PostDetailsComponent = () => {
   const hasUserReacted = post?.reactions?.some((r) => {
     const userId = r.userId;
 
-    const email =
-      typeof userId === "object" &&
-      userId !== null &&
-      "email" in userId
-        ? userId.email
-        : undefined;
+    const reactorId =
+      typeof userId === "object" && userId !== null && "_id" in userId
+        ? userId._id
+        : userId;
 
-    return email === currentUser?.email;
+    return Boolean(currentUser?.userId) && reactorId === currentUser?.userId;
   });
 
   const handleTwitterShare = () => {
@@ -194,75 +210,6 @@ const PostDetailsComponent = () => {
     )}&body=${encodeURIComponent(body)}`;
     window.location.href = url;
   };
-
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [isPausedAudio, setIsPausedAudio] = useState(false);
-
-  const handleTextToSpeech = () => {
-    if (!post?.content) return;
-
-    if (!("speechSynthesis" in window)) {
-      toast.error("Text-to-speech is not supported in this browser.");
-      return;
-    }
-
-    if (isPlayingAudio) {
-      if (isPausedAudio) {
-        window.speechSynthesis.resume();
-        setIsPausedAudio(false);
-        toast.success("Resumed reading story");
-      } else {
-        window.speechSynthesis.pause();
-        setIsPausedAudio(true);
-        toast.success("Paused reading story");
-      }
-    } else {
-      window.speechSynthesis.cancel();
-      const cleanContent = post.content.replace(/<[^>]*>/g, "");
-      const utterance = new SpeechSynthesisUtterance(cleanContent);
-      
-      utterance.onend = () => {
-        setIsPlayingAudio(false);
-        setIsPausedAudio(false);
-      };
-
-      utterance.onerror = (e) => {
-        console.error("SpeechSynthesis error:", e);
-        setIsPlayingAudio(false);
-        setIsPausedAudio(false);
-      };
-
-      const voices = window.speechSynthesis.getVoices();
-      const englishVoice = voices.find(
-        (v) => v.lang.startsWith("en-") && v.name.includes("Google")
-      ) || voices.find((v) => v.lang.startsWith("en-"));
-      if (englishVoice) {
-        utterance.voice = englishVoice;
-      }
-
-      window.speechSynthesis.speak(utterance);
-      setIsPlayingAudio(true);
-      setIsPausedAudio(false);
-      toast.success("Playing story audio");
-    }
-  };
-
-  const handleStopAudio = () => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-    setIsPlayingAudio(false);
-    setIsPausedAudio(false);
-    toast.success("Stopped audio playback");
-  };
-
-  useEffect(() => {
-    return () => {
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, []);
 
   const handleDelete = async () => {
     if (
@@ -421,13 +368,16 @@ const PostDetailsComponent = () => {
                     <span className="inline-flex items-center rounded-full bg-blue-950/60 text-blue-300 border border-blue-700/50 py-1 px-3 text-xs font-semibold">
                       🌐 {post.language}
                     </span>
+                    <span className="inline-flex items-center rounded-full bg-slate-800/60 text-slate-400 border border-slate-700/50 py-1 px-3 text-xs font-semibold">
+                      📖 {formatReadingStats(post.content)}
+                    </span>
                   </div>
                 )}
 
                 <div className="mb-12">
-                  <img
+                  <ImageFallback
                     src={post?.imageURL}
-                    alt={post?.title}
+                    alt={post?.title || "Story image"}
                     className="w-full h-[400px] object-cover rounded-lg shadow-md"
                   />
                 </div>
@@ -435,6 +385,12 @@ const PostDetailsComponent = () => {
                 <div className="prose max-w-none mb-12 text-slate-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed text-lg font-light">
                   <p>{post?.content}</p>
                 </div>
+
+                {post?.content && (
+                  <div className="mb-12">
+                    <AudioPlayer text={post.content} title={post.title} />
+                  </div>
+                )}
               </>
             )}
 
@@ -458,37 +414,8 @@ const PostDetailsComponent = () => {
                 {post && (
                   <BookmarkButton
                     storyId={post._id}
-                    bookmarks={post.bookmarks}
                     className="!border-none !px-0 bg-transparent hover:bg-transparent"
                   />
-                )}
-                <button
-                  onClick={handleTextToSpeech}
-                  className={`flex items-center space-x-2 transition-colors cursor-pointer ${
-                    isPlayingAudio
-                      ? isPausedAudio
-                        ? "text-amber-500 hover:text-amber-400"
-                        : "text-green-500 hover:text-green-400"
-                      : "text-gray-600 hover:text-gray-400"
-                  }`}
-                  title={isPlayingAudio ? (isPausedAudio ? "Resume Story" : "Pause Story") : "Listen to Story"}
-                >
-                  <i
-                    className={`fas ${
-                      isPlayingAudio ? (isPausedAudio ? "fa-circle-play" : "fa-circle-pause") : "fa-volume-high"
-                    }`}
-                  ></i>
-                  <span>{isPlayingAudio ? (isPausedAudio ? "Resume" : "Pause") : "Listen"}</span>
-                </button>
-                {isPlayingAudio && (
-                  <button
-                    onClick={handleStopAudio}
-                    className="flex items-center space-x-2 text-red-500 hover:text-red-400 transition-colors cursor-pointer"
-                    title="Stop Audio"
-                  >
-                    <i className="fas fa-circle-stop"></i>
-                    <span>Stop</span>
-                  </button>
                 )}
               </div>
 
@@ -668,4 +595,3 @@ const PostDetailsComponent = () => {
 };
 
 export default PostDetailsComponent;
-
