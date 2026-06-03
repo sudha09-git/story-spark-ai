@@ -6,8 +6,24 @@ import { getUserInfo } from "./services/auth.service";
 
 import RootLayout from "./components/layout/root_layout.component";
 import DashboardLayout from "./components/dashboard/dashboard_layout.component";
+import AboutUsComponent from "./components/footer/about-us.tsx";
+import AnalyticsPage from "./components/dashboard/analytics/analytics.page";
+import BlogComponent from "./components/footer/blog.tsx";
+import BlogPostComponent from "./components/footer/blog-post.tsx";
+import BookmarksComponent from "./components/post/bookmarks.component";
+import BranchingStory from "./components/stories/BranchingStory";
+import CareerComponent from "./components/footer/career.tsx";
+import CollabHome from "./components/collab/CollabHome";
+import CollabRoom from "./components/collab/CollabRoom";
+import StoriesComponent from "./components/stories/stories.component";
 
-import DashboardLayout from "./components/dashboard/dashboard_layout.component";
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
+import ScrollToTop from "./components/ScrollToTop";
 import HeroSectionComponent from "./components/hero/hero_section.component";
 import HomeComponent from "./components/home/home.component";
 import LoginComponent from "./components/login/login.component";
